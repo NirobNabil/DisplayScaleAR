@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = 8443;
-const ROOT = path.join(__dirname, 'public');
+const ROOT = __dirname;
 
 const MIME = {
   '.html': 'text/html',
