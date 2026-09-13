@@ -7,8 +7,8 @@ const hintEl = document.getElementById('hint');
 const overlayEl = document.getElementById('overlay');
 const selectEl = document.getElementById('preset');
 const resetBtn = document.getElementById('reset');
-const rotateLeftBtn = document.getElementById('rotate-left');
-const rotateRightBtn = document.getElementById('rotate-right');
+const changeSurfaceBtn = document.getElementById('change-surface');
+const axisControlsEl = document.getElementById('axis-controls');
 
 // PRESETS / presetToMeters come from presets.js (plain <script>, loaded before this module).
 
@@ -40,9 +40,10 @@ if (!navigator.xr) {
 let renderer, scene, camera, reticle, controller;
 let hitTestSource = null;
 let localSpace = null;
-let anchorTransform = null; // { position: THREE.Vector3, quaternion: THREE.Quaternion }
+let anchorTransform = null; // { position, baseQuaternion, pitch, yaw, roll } — see getFinalQuaternion
 let rectGroup = null;
 let latestHitPose = null;
+let surfaceLocked = false;
 
 function makeLabelSprite(text) {
   const canvas = document.createElement('canvas');
@@ -69,8 +70,9 @@ function buildRectGroup(presetIndex) {
 
   const group = new THREE.Group();
 
+  // Plane stays in its default orientation (spans local X/Y, normal +Z, centered at origin).
+  // All lie-flat/stand-up/tilt behavior comes from anchorTransform's rotation, not the geometry.
   const planeGeom = new THREE.PlaneGeometry(width, height);
-  planeGeom.rotateX(-Math.PI / 2); // lie flat: local Y becomes the surface normal
 
   const fillMat = new THREE.MeshBasicMaterial({
     color: 0x3388ff,
@@ -87,10 +89,26 @@ function buildRectGroup(presetIndex) {
   const wCm = (width * 100).toFixed(1);
   const hCm = (height * 100).toFixed(1);
   const label = makeLabelSprite(`${preset.name} — ${wCm} × ${hCm} cm`);
-  label.position.set(0, 0.02, -height / 2 - 0.15);
+  label.position.set(0, -height / 2 - 0.08, 0.02);
   group.add(label);
 
   return group;
+}
+
+const AXIS_X = new THREE.Vector3(1, 0, 0);
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+const AXIS_Z = new THREE.Vector3(0, 0, 1);
+
+// Composed orientation: the raw hit-test pose, a fixed -90° pitch so a fresh
+// placement lies flat on the tapped surface (old default behavior), then the
+// user's own pitch/yaw/roll adjustments on top for full 3D freedom.
+function getFinalQuaternion(t) {
+  const q = t.baseQuaternion.clone();
+  q.multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_X, -Math.PI / 2));
+  q.multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_X, t.pitch));
+  q.multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_Y, t.yaw));
+  q.multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_Z, t.roll));
+  return q;
 }
 
 function rebuildRectAtAnchor() {
@@ -98,17 +116,23 @@ function rebuildRectAtAnchor() {
   if (rectGroup) scene.remove(rectGroup);
   rectGroup = buildRectGroup(+selectEl.value);
   rectGroup.position.copy(anchorTransform.position);
-  rectGroup.quaternion.copy(anchorTransform.quaternion);
-  rectGroup.rotateY(anchorTransform.spin); // spin around the plane's own normal
+  rectGroup.quaternion.copy(getFinalQuaternion(anchorTransform));
   scene.add(rectGroup);
 }
 
 selectEl.addEventListener('change', rebuildRectAtAnchor);
-rotateLeftBtn.addEventListener('click', () => rotateRect(-Math.PI / 12)); // 15°
-rotateRightBtn.addEventListener('click', () => rotateRect(Math.PI / 12));
+
+changeSurfaceBtn.addEventListener('click', () => {
+  surfaceLocked = false;
+  axisControlsEl.hidden = true;
+  hintEl.hidden = false;
+});
 
 resetBtn.addEventListener('click', () => {
   anchorTransform = null;
+  surfaceLocked = false;
+  axisControlsEl.hidden = true;
+  hintEl.hidden = false;
   if (rectGroup) {
     scene.remove(rectGroup);
     rectGroup = null;
@@ -116,24 +140,68 @@ resetBtn.addEventListener('click', () => {
 });
 
 function onSelect() {
-  if (!latestHitPose) return;
+  if (surfaceLocked || !latestHitPose) return;
   const { position, orientation } = latestHitPose;
   anchorTransform = {
     position: new THREE.Vector3(position.x, position.y, position.z),
-    quaternion: new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w),
-    spin: 0,
+    baseQuaternion: new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w),
+    pitch: 0,
+    yaw: 0,
+    roll: 0,
   };
   rebuildRectAtAnchor();
+  surfaceLocked = true;
+  axisControlsEl.hidden = false;
+  hintEl.hidden = true;
 }
 
-function rotateRect(deltaRadians) {
+const TRANSLATE_STEP = 0.005; // 5mm per tick
+const ROTATE_STEP = (1 * Math.PI) / 180; // 1° per tick
+const HOLD_DELAY_MS = 350;
+const HOLD_INTERVAL_MS = 60;
+
+function applyAxisNudge(kind, axis, dir) {
   if (!anchorTransform) return;
-  anchorTransform.spin += deltaRadians;
+  if (kind === 't') {
+    const localAxis = axis === 'x' ? AXIS_X : axis === 'y' ? AXIS_Y : AXIS_Z;
+    const worldAxis = localAxis.clone().applyQuaternion(getFinalQuaternion(anchorTransform));
+    anchorTransform.position.addScaledVector(worldAxis, dir * TRANSLATE_STEP);
+  } else {
+    anchorTransform[axis] += dir * ROTATE_STEP;
+  }
   rebuildRectAtAnchor();
 }
 
+// Tap = one small step. Hold = repeats the same step continuously until released.
+document.querySelectorAll('#axis-controls button.nudge').forEach((btn) => {
+  const kind = btn.dataset.kind;
+  const axis = btn.dataset.axis;
+  const dir = Number(btn.dataset.dir);
+  let holdTimeout = null;
+  let holdInterval = null;
+
+  const stop = () => {
+    clearTimeout(holdTimeout);
+    clearInterval(holdInterval);
+    holdTimeout = null;
+    holdInterval = null;
+  };
+  const start = (e) => {
+    e.preventDefault();
+    applyAxisNudge(kind, axis, dir);
+    holdTimeout = setTimeout(() => {
+      holdInterval = setInterval(() => applyAxisNudge(kind, axis, dir), HOLD_INTERVAL_MS);
+    }, HOLD_DELAY_MS);
+  };
+
+  btn.addEventListener('pointerdown', start);
+  btn.addEventListener('pointerup', stop);
+  btn.addEventListener('pointercancel', stop);
+  btn.addEventListener('pointerleave', stop);
+});
+
 function onXRFrame(timestamp, frame) {
-  if (frame && hitTestSource) {
+  if (frame && hitTestSource && !surfaceLocked) {
     const results = frame.getHitTestResults(hitTestSource);
     if (results.length > 0) {
       const pose = results[0].getPose(localSpace);
@@ -144,6 +212,8 @@ function onXRFrame(timestamp, frame) {
       latestHitPose = null;
       reticle.visible = false;
     }
+  } else {
+    reticle.visible = false;
   }
   renderer.render(scene, camera);
 }
@@ -182,7 +252,10 @@ async function startAR() {
 
   localSpace = renderer.xr.getReferenceSpace();
   const viewerSpace = await session.requestReferenceSpace('viewer');
-  hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+  hitTestSource = await session.requestHitTestSource({
+    space: viewerSpace,
+    entityTypes: ['plane', 'point'],
+  });
 
   controller = renderer.xr.getController(0);
   controller.addEventListener('select', onSelect);

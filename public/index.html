@@ -13,11 +13,16 @@
     }
     #overlay {
       position: fixed; bottom: 0; left: 0; right: 0;
-      display: flex; gap: 8px; padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom));
+      display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom));
       background: rgba(0,0,0,0.6); align-items: center;
     }
-    #overlay select { flex: 1; font-size: 16px; padding: 8px; }
+    #overlay[hidden] { display: none; }
+    #overlay select { flex: 1 1 100%; font-size: 16px; padding: 8px; }
     #overlay button { font-size: 16px; padding: 8px 16px; }
+    #axis-controls { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+    #axis-controls[hidden] { display: none; }
+    #axis-controls .row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+    #axis-controls button { flex: 1 1 auto; font-size: 13px; padding: 8px 4px; touch-action: none; user-select: none; }
     #unsupported {
       position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
       background: #111; color: #fff; padding: 24px; text-align: center; font-size: 16px;
@@ -37,8 +42,27 @@
   <div id="hint" hidden>Tap a detected surface to place</div>
   <div id="overlay" hidden>
     <select id="preset"></select>
-    <button id="rotate-left">⟲</button>
-    <button id="rotate-right">⟳</button>
+    <div id="axis-controls" hidden>
+      <div class="row">
+        <button class="nudge" data-kind="t" data-axis="x" data-dir="-1">◀ X</button>
+        <button class="nudge" data-kind="t" data-axis="x" data-dir="1">X ▶</button>
+        <button class="nudge" data-kind="t" data-axis="y" data-dir="1">▲ Y</button>
+        <button class="nudge" data-kind="t" data-axis="y" data-dir="-1">Y ▼</button>
+        <button class="nudge" data-kind="t" data-axis="z" data-dir="1">Near</button>
+        <button class="nudge" data-kind="t" data-axis="z" data-dir="-1">Far</button>
+      </div>
+      <div class="row">
+        <button class="nudge" data-kind="r" data-axis="pitch" data-dir="-1">Pitch −</button>
+        <button class="nudge" data-kind="r" data-axis="pitch" data-dir="1">Pitch +</button>
+        <button class="nudge" data-kind="r" data-axis="yaw" data-dir="-1">Yaw −</button>
+        <button class="nudge" data-kind="r" data-axis="yaw" data-dir="1">Yaw +</button>
+        <button class="nudge" data-kind="r" data-axis="roll" data-dir="-1">Roll −</button>
+        <button class="nudge" data-kind="r" data-axis="roll" data-dir="1">Roll +</button>
+      </div>
+      <div class="row">
+        <button id="change-surface">Change Surface</button>
+      </div>
+    </div>
     <button id="reset">Reset</button>
   </div>
 
