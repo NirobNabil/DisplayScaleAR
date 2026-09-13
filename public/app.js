@@ -7,6 +7,8 @@ const hintEl = document.getElementById('hint');
 const overlayEl = document.getElementById('overlay');
 const selectEl = document.getElementById('preset');
 const resetBtn = document.getElementById('reset');
+const rotateLeftBtn = document.getElementById('rotate-left');
+const rotateRightBtn = document.getElementById('rotate-right');
 
 // PRESETS / presetToMeters come from presets.js (plain <script>, loaded before this module).
 
@@ -97,10 +99,13 @@ function rebuildRectAtAnchor() {
   rectGroup = buildRectGroup(+selectEl.value);
   rectGroup.position.copy(anchorTransform.position);
   rectGroup.quaternion.copy(anchorTransform.quaternion);
+  rectGroup.rotateY(anchorTransform.spin); // spin around the plane's own normal
   scene.add(rectGroup);
 }
 
 selectEl.addEventListener('change', rebuildRectAtAnchor);
+rotateLeftBtn.addEventListener('click', () => rotateRect(-Math.PI / 12)); // 15°
+rotateRightBtn.addEventListener('click', () => rotateRect(Math.PI / 12));
 
 resetBtn.addEventListener('click', () => {
   anchorTransform = null;
@@ -116,7 +121,14 @@ function onSelect() {
   anchorTransform = {
     position: new THREE.Vector3(position.x, position.y, position.z),
     quaternion: new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w),
+    spin: 0,
   };
+  rebuildRectAtAnchor();
+}
+
+function rotateRect(deltaRadians) {
+  if (!anchorTransform) return;
+  anchorTransform.spin += deltaRadians;
   rebuildRectAtAnchor();
 }
 
