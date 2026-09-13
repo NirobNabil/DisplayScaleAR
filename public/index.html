@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AR Display Size Visualizer</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
+    #hint {
+      position: fixed; top: 12%; left: 50%; transform: translateX(-50%);
+      color: #fff; background: rgba(0,0,0,0.55); padding: 8px 16px; border-radius: 8px;
+      font-size: 14px; pointer-events: none;
+    }
+    #overlay {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      display: flex; gap: 8px; padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom));
+      background: rgba(0,0,0,0.6); align-items: center;
+    }
+    #overlay select { flex: 1; font-size: 16px; padding: 8px; }
+    #overlay button { font-size: 16px; padding: 8px 16px; }
+    #unsupported {
+      position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+      background: #111; color: #fff; padding: 24px; text-align: center; font-size: 16px;
+    }
+    #start {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #111; z-index: 5;
+    }
+    #start button { font-size: 20px; padding: 16px 32px; }
+  </style>
+</head>
+<body>
+  <div id="start"><button id="start-ar">Start AR</button></div>
+  <div id="unsupported">
+    Your browser/device doesn't support WebXR AR (needs Chrome for Android on an ARCore-capable phone).
+  </div>
+  <div id="hint" hidden>Tap a detected surface to place</div>
+  <div id="overlay" hidden>
+    <select id="preset"></select>
+    <button id="reset">Reset</button>
+  </div>
+
+  <script src="presets.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
