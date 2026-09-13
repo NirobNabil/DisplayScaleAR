@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { presetToMeters } = require('./public/presets.js');
+const { presetToMeters } = require('./presets.js');
 
 function close(actual, expected, tol = 0.001) {
   assert(Math.abs(actual - expected) < tol, `expected ~${expected}, got ${actual}`);
